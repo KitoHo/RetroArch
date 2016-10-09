@@ -1,7 +1,7 @@
 /* RetroArch - A frontend for libretro.
  * Copyright (C) 2010-2014 - Hans-Kristian Arntzen
- * Copyright (C) 2011-2014 - Daniel De Matteis
- * Copyright (C) 2012-2014 - Michael Lelli
+ * Copyright (C) 2011-2016 - Daniel De Matteis
+ * Copyright (C) 2012-2015 - Michael Lelli
  *
  * RetroArch is free software: you can redistribute it and/or modify it under the terms
  * of the GNU General Public License as published by the Free Software Found-
@@ -18,23 +18,36 @@
 #ifndef _RARCH_FRONTEND_H
 #define _RARCH_FRONTEND_H
 
-#if defined(ANDROID)
-#define args_type() struct android_app*
-#define signature() void* data
-#else
-#define args_type() void*
-#define signature() int argc, char *argv[]
-#endif
+#include <stdint.h>
+#include <stddef.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <retro_common_api.h>
 
-int main_entry_iterate(signature(), args_type() args);
-void main_exit(args_type() args);
+RETRO_BEGIN_DECLS
 
-#ifdef __cplusplus
-}
-#endif
+/**
+ * main_exit:
+ *
+ * Cleanly exit RetroArch.
+ *
+ * Also saves configuration files to disk,
+ * and (optionally) autosave state.
+ **/
+void main_exit(void *args);
+    
+/**
+ * main_entry:
+ *
+ * Main function of RetroArch.
+ *
+ * If HAVE_MAIN is not defined, will contain main loop and will not
+ * be exited from until we exit the program. Otherwise, will 
+ * just do initialization.
+ *
+ * Returns: varies per platform.
+ **/
+int rarch_main(int argc, char *argv[], void *data);
+
+RETRO_END_DECLS
 
 #endif

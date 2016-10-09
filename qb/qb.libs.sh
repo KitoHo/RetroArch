@@ -19,13 +19,17 @@ add_include_dirs()
 add_library_dirs()
 {	while [ "$1" ]; do LIBRARY_DIRS="$LIBRARY_DIRS -L$1"; shift; done;}
 
-check_lib()	#$1 = HAVE_$1	$2 = lib	$3 = function in lib	$4 = extralibs
+check_lib()	#$1 = HAVE_$1	$2 = lib	$3 = function in lib	$4 = extralibs $5 = headers
 {	tmpval="$(eval echo \$HAVE_$1)"
 	[ "$tmpval" = 'no' ] && return 0
 
 	if [ "$3" ]; then
 		ECHOBUF="Checking function $3 in ${2% }"
-		echo "void $3(void); int main(void) { $3(); return 0; }" > $TEMP_C
+		if [ "$5" ]; then
+			printf "$5\nint main(void) { void *p = (void*)$3; return 0; }" > $TEMP_C
+		else
+			echo "void $3(void); int main(void) { $3(); return 0; }" > $TEMP_C
+		fi
 	else
 		ECHOBUF="Checking existence of ${2% }"
 		echo "int main(void) { return 0; }" > $TEMP_C
@@ -41,7 +45,7 @@ check_lib()	#$1 = HAVE_$1	$2 = lib	$3 = function in lib	$4 = extralibs
 		exit 1
 	}
 
-	/bin/true
+	true
 }
 
 check_lib_cxx()	#$1 = HAVE_$1	$2 = lib	$3 = function in lib	$4 = extralibs	$5 = critical error message [checked only if non-empty]
@@ -69,7 +73,7 @@ check_lib_cxx()	#$1 = HAVE_$1	$2 = lib	$3 = function in lib	$4 = extralibs	$5 = 
 	
 	}
 
-	/bin/true
+	true
 }
 
 check_code_c()
@@ -100,25 +104,26 @@ check_pkgconf()	#$1 = HAVE_$1	$2 = package	$3 = version	$4 = critical error mess
 {	tmpval="$(eval echo \$HAVE_$1)"
 	[ "$tmpval" = 'no' ] && return 0
 
-	[ "$PKG_CONF_PATH" ] || {
-		ECHOBUF="Checking for pkg-config"
-#		echo -n "Checking for pkg-config"
-		for PKG_CONF_PATH in $(which pkg-config) ''; do [ "$PKG_CONF_PATH" ] && break; done
-		[ "$PKG_CONF_PATH" ] || { echo "pkg-config not found. Exiting ..."; exit 1;}
-		echo "$ECHOBUF ... $PKG_CONF_PATH"
+	ECHOBUF="Checking presence of package $2"
+	[ "$3" ] && ECHOBUF="$ECHOBUF >= $3"
+
+	[ "$PKG_CONF_PATH" = "none" ] && {
+		eval HAVE_$1="no"
+		echo "$ECHOBUF ... no"
+		return 0
 	}
 
-	ECHOBUF="Checking presence of package $2"
-	[ "$3" ] && ECHOBUF="$ECHOBUF with minimum version $3"
-#	echo -n "$ECHOBUF ... "
 	answer='no'
-	pkg-config --atleast-version="${3:-0.0}" "$2" && {
+	version='no'
+	$PKG_CONF_PATH --atleast-version="${3:-0.0}" "$2" && {
 		answer='yes'
-		eval $1_CFLAGS=\"$(pkg-config $2 --cflags)\"
-		eval $1_LIBS=\"$(pkg-config $2 --libs)\"
+		version=$($PKG_CONF_PATH --modversion "$2")
+		eval $1_CFLAGS=\"$($PKG_CONF_PATH $2 --cflags)\"
+		eval $1_LIBS=\"$($PKG_CONF_PATH $2 --libs)\"
 	}
 	
-	eval HAVE_$1="$answer"; echo "$ECHOBUF ... $answer"
+	eval HAVE_$1="$answer";
+	echo "$ECHOBUF ... $version"
 	PKG_CONF_USED="$PKG_CONF_USED $1"
 	[ "$answer" = 'no' ] && {
 		[ "$4" ] && { echo "$4"; exit 1;}
@@ -129,18 +134,19 @@ check_pkgconf()	#$1 = HAVE_$1	$2 = package	$3 = version	$4 = critical error mess
 	}
 }
 
-check_header()	#$1 = HAVE_$1	$2 = header file
+check_header()	#$1 = HAVE_$1	$2..$5 = header files
 {	tmpval="$(eval echo \$HAVE_$1)"
 	[ "$tmpval" = 'no' ] && return 0
-	ECHOBUF="Checking presence of header file $2"
+	CHECKHEADER="$2"
 #	echo -n "Checking presence of header file $2"
-	cat << EOF > "$TEMP_C"
-#include<$2>
-int main(void) { return 0; }
-EOF
+	echo "#include <$2>" > "$TEMP_C"
+	[ "$3" != "" ] && CHECKHEADER="$3" && echo "#include <$3>" >> "$TEMP_C"
+	[ "$4" != "" ] && CHECKHEADER="$4" && echo "#include <$4>" >> "$TEMP_C"
+	[ "$5" != "" ] && CHECKHEADER="$5" && echo "#include <$5>" >> "$TEMP_C"
+	echo "int main(void) { return 0; }" >> "$TEMP_C"
 	answer='no'
 	"$CC" -o "$TEMP_EXE" "$TEMP_C" $INCLUDE_DIRS >>config.log 2>&1 && answer='yes'
-	eval HAVE_$1="$answer"; echo "$ECHOBUF ... $answer"
+	eval HAVE_$1="$answer"; echo "Checking presence of header file $CHECKHEADER ... $answer"
 	rm "$TEMP_C" "$TEMP_EXE" >/dev/null 2>&1
 	[ "$tmpval" = 'yes' ] && [ "$answer" = 'no' ] && {
 		echo "Build assumed that $2 exists, but cannot locate. Exiting ..."
@@ -207,7 +213,11 @@ create_config_header()
 
 		while [ "$1" ]; do
 			case $(eval echo \$HAVE_$1) in
-				'yes') echo "#define HAVE_$1 1";;
+				'yes')
+					if [ "$(eval echo \$C89_$1)" = "no" ]; then echo "#if __cplusplus || __STDC_VERSION__ >= 199901L"; fi
+					echo "#define HAVE_$1 1"
+					if [ "$(eval echo \$C89_$1)" = "no" ]; then echo "#endif"; fi
+					;;
 				'no') echo "/* #undef HAVE_$1 */";;
 			esac
 			shift
@@ -232,6 +242,7 @@ create_config_make()
 			echo "CXX = $CXX"
 			echo "CXXFLAGS = $CXXFLAGS"
 		fi
+		echo "WINDRES = $WINDRES"
 		echo "ASFLAGS = $ASFLAGS"
 		echo "LDFLAGS = $LDFLAGS"
 		echo "INCLUDE_DIRS = $INCLUDE_DIRS"
@@ -241,7 +252,11 @@ create_config_make()
 
 		while [ "$1" ]; do
 			case $(eval echo \$HAVE_$1) in
-				'yes') echo "HAVE_$1 = 1";;
+				'yes')
+					if [ "$(eval echo \$C89_$1)" = "no" ]; then echo "ifneq (\$(C89_BUILD),1)"; fi
+					echo "HAVE_$1 = 1"
+					if [ "$(eval echo \$C89_$1)" = "no" ]; then echo "endif"; fi
+					;;
 				'no') echo "HAVE_$1 = 0";;
 			esac
 			

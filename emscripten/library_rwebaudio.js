@@ -3,7 +3,7 @@
 var LibraryRWebAudio = {
    $RA__deps: ['$Browser', 'usleep'],
    $RA: {
-      BUFFER_SIZE: 256,
+      BUFFER_SIZE: 2048,
 
       context: null,
       buffers: [],

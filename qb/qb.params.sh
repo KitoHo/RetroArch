@@ -1,3 +1,10 @@
+print_help_option() # $1 = option $@ = description
+{
+	_opt="$1"
+	shift 1
+	printf "  %-25s  %s\n" "$_opt" "$@"
+}
+
 print_help()
 {	cat << EOF
 ====================
@@ -6,32 +13,38 @@ print_help()
 Package: $PACKAGE_NAME
 
 General environment variables:
-CC:         C compiler
-CFLAGS:     C compiler flags
-CXX:        C++ compiler
-CXXFLAGS:   C++ compiler flags
-LDFLAGS:    Linker flags
+  CC:         C compiler
+  CFLAGS:     C compiler flags
+  CXX:        C++ compiler
+  CXXFLAGS:   C++ compiler flags
+  LDFLAGS:    Linker flags
 
 General options:
---prefix=\$path: Install path prefix
---global-config-dir=\$path: System wide config file prefix
---host=HOST: cross-compile to build programs to run on HOST
---help: Show this help
-
-Custom options:
 EOF
+	print_help_option "--prefix=PATH"            "Install path prefix"
+	print_help_option "--global-config-dir=PATH" "System wide config file prefix"
+	print_help_option "--host=HOST"              "cross-compile to build programs to run on HOST"
+	print_help_option "--help"                   "Show this help"
+
+	echo ""
+	echo "Custom options:"
+
 	while IFS='=#' read VAR VAL COMMENT; do
 		VAR=$(echo "${VAR##HAVE_}" | tr '[A-Z]' '[a-z]')
-		case "$VAL" in
-			'yes'*)
-				echo "--disable-$VAR: $COMMENT";;
-			'no'*)
-				echo "--enable-$VAR: $COMMENT";;
-			'auto'*)
-				echo "--enable-$VAR: $COMMENT"
-				echo "--disable-$VAR";;
+		case "$VAR" in
+			'c89_'*) true;;
 			*)
-				echo "--with-$VAR: $COMMENT";;
+			case "$VAL" in
+				'yes'*)
+					print_help_option "--disable-$VAR" "Disable $COMMENT";;
+				'no'*)
+					print_help_option "--enable-$VAR" "Enable $COMMENT";;
+				'auto'*)
+					print_help_option "--enable-$VAR" "Enable $COMMENT"
+					print_help_option "--disable-$VAR" "Disable $COMMENT";;
+				*)
+					print_help_option "--with-$VAR" "Config $COMMENT";;
+			esac
 		esac
 	done < 'qb/config.params.sh'
 }
@@ -39,7 +52,7 @@ EOF
 opt_exists() # $opt is returned if exists in OPTS
 {	opt=$(echo "$1" | tr '[a-z]' '[A-Z]')
 	for OPT in $OPTS; do [ "$opt" = "$OPT" ] && return; done
-	print_help; exit 1
+	echo "Unknown option $2"; exit 1
 }
 
 parse_input() # Parse stuff :V
@@ -53,21 +66,21 @@ parse_input() # Parse stuff :V
 			--global-config-dir=*) GLOBAL_CONFIG_DIR=${1##--global-config-dir=};;
 			--host=*) CROSS_COMPILE=${1##--host=}-;;
 			--enable-*)
-				opt_exists "${1##--enable-}"
+				opt_exists "${1##--enable-}" "$1"
 				eval "HAVE_$opt=yes"
 			;;
 			--disable-*)
-				opt_exists "${1##--disable-}"
+				opt_exists "${1##--disable-}" "$1"
 				eval "HAVE_$opt=no"
 			;;
 			--with-*)
-				arg=${1##--with-}
-				val=${arg##*=}
-				opt_exists "${arg%%=*}"
-				eval "$opt=$val"
+				arg="${1##--with-}"
+				val="${arg##*=}"
+				opt_exists "${arg%%=*}" "$1"
+				eval "$opt=\"$val\""
 			;;
 			-h|--help) print_help; exit 0;;
-			*) print_help; exit 1;;
+			*) echo "Unknown option $1"; exit 1;;
 		esac
 		shift
 	done

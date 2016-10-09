@@ -1,5 +1,6 @@
 /*  RetroArch - A frontend for libretro.
  *  Copyright (C) 2010-2014 - Hans-Kristian Arntzen
+ *  Copyright (C) 2011-2016 - Daniel De Matteis
  * 
  *  RetroArch is free software: you can redistribute it and/or modify it under the terms
  *  of the GNU General Public License as published by the Free Software Found-
@@ -18,14 +19,28 @@
 
 #include <stddef.h>
 
-typedef struct autosave autosave_t;
+#include <retro_common_api.h>
 
-autosave_t *autosave_new(const char *path, const void *data, size_t size, unsigned interval);
-void autosave_lock(autosave_t *handle);
-void autosave_unlock(autosave_t *handle);
-void autosave_free(autosave_t *handle);
+RETRO_BEGIN_DECLS
 
-void lock_autosave(void);
-void unlock_autosave(void);
+/**
+ * autosave_lock:
+ *
+ * Lock autosave.
+ **/
+void autosave_lock(void);
+
+/**
+ * autosave_unlock:
+ *
+ * Unlocks autosave.
+ **/
+void autosave_unlock(void);
+
+void autosave_init(void);
+
+void autosave_deinit(void);
+
+RETRO_END_DECLS
 
 #endif
